@@ -8,10 +8,10 @@
 const provider = new ethers.providers.JsonRpcProvider("http://localhost:8545");
 var defaultAccount;
 
-const exchange_name = '';             // TODO: fill in the name of your exchange
+const exchange_name = 'LoliExchange';             // TODO: fill in the name of your exchange
 
-const token_name = '';                // TODO: replace with name of your token
-const token_symbol = '';              // TODO: replace with symbol for your token
+const token_name = 'LoliPop';                // TODO: replace with name of your token
+const token_symbol = 'LOL';              // TODO: replace with symbol for your token
 
 
 // =============================================================================
