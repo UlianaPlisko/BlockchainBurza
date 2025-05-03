@@ -16,41 +16,30 @@ contract TokenExchange is Ownable {
     uint private token_reserves = 0;
     uint private eth_reserves = 0;
 
-    mapping(address => uint) private lps; 
-     
+    // Store LP shares as percentage * 1000 for precision
+    mapping(address => uint) private lps;
+    uint private constant SHARE_DENOMINATOR = 1000;
+    uint private total_shares = 0;
+
     // Needed for looping through the keys of the lps mapping
-    address[] private lp_providers;                     
+    address[] private lp_providers;
 
     // liquidity rewards
-    uint private swap_fee_numerator = 3;                
+    uint private swap_fee_numerator = 3;
     uint private swap_fee_denominator = 100;
 
     // Constant: x * y = k
     uint private k;
 
     constructor() {}
-    
 
-    // Function createPool: Initializes a liquidity pool between your Token and ETH.
-    // ETH will be sent to pool in this transaction as msg.value
-    // amountTokens specifies the amount of tokens to transfer from the liquidity provider.
-    // Sets up the initial exchange rate for the pool by setting amount of token and amount of ETH.
-    function createPool(uint amountTokens)
-        external
-        payable
-        onlyOwner
-    {
-        // This function is already implemented for you; no changes needed.
-
-        // require pool does not yet exist:
-        require (token_reserves == 0, "Token reserves was not 0");
-        require (eth_reserves == 0, "ETH reserves was not 0.");
-
-        // require nonzero values were sent
-        require (msg.value > 0, "Need eth to create pool.");
+    function createPool(uint amountTokens) external payable onlyOwner {
+        require(token_reserves == 0, "Token reserves was not 0");
+        require(eth_reserves == 0, "ETH reserves was not 0.");
+        require(msg.value > 0, "Need eth to create pool.");
         uint tokenSupply = token.balanceOf(msg.sender);
         require(amountTokens <= tokenSupply, "Not have enough tokens to create the pool");
-        require (amountTokens > 0, "Need tokens to create pool.");
+        require(amountTokens > 0, "Need tokens to create pool.");
 
         token.transferFrom(msg.sender, address(this), amountTokens);
         token_reserves = token.balanceOf(address(this));
@@ -58,80 +47,213 @@ contract TokenExchange is Ownable {
         k = token_reserves * eth_reserves;
     }
 
-    // Function removeLP: removes a liquidity provider from the list.
-    // This function also removes the gap left over from simply running "delete".
     function removeLP(uint index) private {
         require(index < lp_providers.length, "specified index is larger than the number of lps");
         lp_providers[index] = lp_providers[lp_providers.length - 1];
         lp_providers.pop();
     }
 
-    // Function getSwapFee: Returns the current swap fee ratio to the client.
     function getSwapFee() public view returns (uint, uint) {
         return (swap_fee_numerator, swap_fee_denominator);
     }
 
-    // ============================================================
-    //                    FUNCTIONS TO IMPLEMENT
-    // ============================================================
-    
-    /* ========================= Liquidity Provider Functions =========================  */ 
-
-    // Function addLiquidity: Adds liquidity given a supply of ETH (sent to the contract as msg.value).
-    // You can change the inputs, or the scope of your function, as needed.
-    function addLiquidity(uint max_exchange_rate, uint min_exchange_rate) 
-        external 
-        payable
+    // Function addLiquidity: Adds liquidity given a supply of ETH
+    function addLiquidity(uint max_exchange_rate, uint min_exchange_rate)
+    external
+    payable
     {
-        /******* TODO: Implement this function *******/
-       
+        require(msg.value > 0, "Must provide ETH");
+        require(eth_reserves > 0 && token_reserves > 0, "Pool not initialized");
+
+        // Calculate tokens needed based on current pool ratio
+        uint tokens_needed = (msg.value * token_reserves) / eth_reserves;
+        require(tokens_needed > 0, "Insufficient token amount");
+        require(token.balanceOf(msg.sender) >= tokens_needed, "Insufficient token balance");
+
+        // Check exchange rate bounds
+        uint current_rate = (token_reserves * 1000) / eth_reserves;
+        require(current_rate <= max_exchange_rate, "Exchange rate too high");
+        require(current_rate >= min_exchange_rate, "Exchange rate too low");
+
+        // Calculate share of the pool
+        uint new_eth_total = eth_reserves + msg.value;
+        uint share = (msg.value * SHARE_DENOMINATOR) / new_eth_total;
+        require(share > 0, "Share too small");
+
+        // Transfer tokens
+        token.transferFrom(msg.sender, address(this), tokens_needed);
+
+        // Update reserves
+        token_reserves = token.balanceOf(address(this));
+        eth_reserves = address(this).balance;
+        k = token_reserves * eth_reserves;
+
+        // Update LP shares
+        if (lps[msg.sender] == 0) {
+            lp_providers.push(msg.sender);
+        }
+        lps[msg.sender] += share;
+        total_shares += share;
+
+        // Adjust existing providers' shares
+        for (uint i = 0; i < lp_providers.length; i++) {
+            if (lp_providers[i] != msg.sender && lps[lp_providers[i]] > 0) {
+                lps[lp_providers[i]] = (lps[lp_providers[i]] * (new_eth_total - msg.value)) / new_eth_total;
+            }
+        }
     }
 
-
-    // Function removeLiquidity: Removes liquidity given the desired amount of ETH to remove.
-    // You can change the inputs, or the scope of your function, as needed.
+    // Function removeLiquidity: Removes specified amount of liquidity
     function removeLiquidity(uint amountETH, uint max_exchange_rate, uint min_exchange_rate)
-        public 
-        payable
+    public
+    payable
     {
-        /******* TODO: Implement this function *******/
+        require(amountETH > 0, "Must specify ETH amount");
+        require(lps[msg.sender] > 0, "No liquidity provided");
+        require(eth_reserves > amountETH, "Insufficient ETH reserves");
+        require(token_reserves > 0, "Insufficient token reserves");
 
+        // Check exchange rate bounds
+        uint current_rate = (token_reserves * 1000) / eth_reserves;
+        require(current_rate <= max_exchange_rate, "Exchange rate too high");
+        require(current_rate >= min_exchange_rate, "Exchange rate too low");
+
+        // Calculate share to remove
+        uint user_share = lps[msg.sender];
+        uint pool_share = (amountETH * SHARE_DENOMINATOR) / eth_reserves;
+        require(pool_share <= user_share, "Insufficient liquidity share");
+
+        // Calculate tokens to return
+        uint tokens_to_return = (amountETH * token_reserves) / eth_reserves;
+        require(tokens_to_return > 0, "Insufficient token amount");
+        require(token_reserves - tokens_to_return >= 1, "Must leave at least 1 token");
+        require(eth_reserves - amountETH >= 1, "Must leave at least 1 ETH");
+
+        // Update reserves
+        eth_reserves -= amountETH;
+        token_reserves -= tokens_to_return;
+        k = token_reserves * eth_reserves;
+
+        // Update LP shares
+        lps[msg.sender] -= pool_share;
+        total_shares -= pool_share;
+        if (lps[msg.sender] == 0) {
+            for (uint i = 0; i < lp_providers.length; i++) {
+                if (lp_providers[i] == msg.sender) {
+                    removeLP(i);
+                    break;
+                }
+            }
+        }
+
+        // Transfer assets
+        token.transfer(msg.sender, tokens_to_return);
+        payable(msg.sender).transfer(amountETH);
     }
 
-    // Function removeAllLiquidity: Removes all liquidity that msg.sender is entitled to withdraw
-    // You can change the inputs, or the scope of your function, as needed.
+    // Function removeAllLiquidity: Removes all liquidity
     function removeAllLiquidity(uint max_exchange_rate, uint min_exchange_rate)
-        external
-        payable
+    external
+    payable
     {
-        /******* TODO: Implement this function *******/
-    
+        require(lps[msg.sender] > 0, "No liquidity provided");
+        require(eth_reserves > 1, "Insufficient ETH reserves");
+        require(token_reserves > 1, "Insufficient token reserves");
+
+        // Check exchange rate bounds
+        uint current_rate = (token_reserves * 1000) / eth_reserves;
+        require(current_rate <= max_exchange_rate, "Exchange rate too high");
+        require(current_rate >= min_exchange_rate, "Exchange rate too low");
+
+        // Calculate amounts to return
+        uint user_share = lps[msg.sender];
+        uint amountETH = (user_share * eth_reserves) / SHARE_DENOMINATOR;
+        uint tokens_to_return = (user_share * token_reserves) / SHARE_DENOMINATOR;
+
+        require(amountETH > 0, "No ETH to withdraw");
+        require(tokens_to_return > 0, "No tokens to withdraw");
+        require(eth_reserves - amountETH >= 1, "Must leave at least 1 ETH");
+        require(token_reserves - tokens_to_return >= 1, "Must leave at least 1 token");
+
+        // Update reserves
+        eth_reserves -= amountETH;
+        token_reserves -= tokens_to_return;
+        k = token_reserves * eth_reserves;
+
+        // Remove LP
+        total_shares -= user_share;
+        lps[msg.sender] = 0;
+        for (uint i = 0; i < lp_providers.length; i++) {
+            if (lp_providers[i] == msg.sender) {
+                removeLP(i);
+                break;
+            }
+        }
+
+        // Transfer assets
+        token.transfer(msg.sender, tokens_to_return);
+        payable(msg.sender).transfer(amountETH);
     }
-    /***  Define additional functions for liquidity fees here as needed ***/
 
-
-    /* ========================= Swap Functions =========================  */ 
-
-    // Function swapTokensForETH: Swaps your token with ETH
-    // You can change the inputs, or the scope of your function, as needed.
+    // Function swapTokensForETH: Swaps tokens for ETH
     function swapTokensForETH(uint amountTokens, uint max_exchange_rate)
-        external 
-        payable
+    external
+    payable
     {
-        /******* TODO: Implement this function *******/
+        require(amountTokens > 0, "Must provide tokens");
+        require(token.balanceOf(msg.sender) >= amountTokens, "Insufficient token balance");
+        require(eth_reserves > 1, "Insufficient ETH reserves");
 
+        // Check exchange rate
+        uint current_rate = (token_reserves * 1000) / eth_reserves;
+        require(current_rate <= max_exchange_rate, "Exchange rate too high");
+
+        // Calculate ETH to send
+        uint eth_to_send = (amountTokens * eth_reserves) / (token_reserves + amountTokens);
+        require(eth_to_send > 0, "Insufficient ETH amount");
+        require(eth_reserves - eth_to_send >= 1, "Must leave at least 1 ETH");
+
+        // Apply fee
+        uint fee = (eth_to_send * swap_fee_numerator) / swap_fee_denominator;
+        eth_to_send -= fee;
+
+        // Update reserves
+        token_reserves += amountTokens;
+        eth_reserves -= eth_to_send;
+        k = token_reserves * eth_reserves;
+
+        // Transfer assets
+        token.transferFrom(msg.sender, address(this), amountTokens);
+        payable(msg.sender).transfer(eth_to_send);
     }
 
-
-
-    // Function swapETHForTokens: Swaps ETH for your tokens
-    // ETH is sent to contract as msg.value
-    // You can change the inputs, or the scope of your function, as needed.
+    // Function swapETHForTokens: Swaps ETH for tokens
     function swapETHForTokens(uint max_exchange_rate)
-        external
-        payable 
+    external
+    payable
     {
-        /******* TODO: Implement this function *******/
+        require(msg.value > 0, "Must provide ETH");
+        require(token_reserves > 1, "Insufficient token reserves");
 
+        // Check exchange rate
+        uint current_rate = (token_reserves * 1000) / eth_reserves;
+        require(current_rate <= max_exchange_rate, "Exchange rate too high");
+
+        // Calculate tokens to send
+        uint tokens_to_send = (msg.value * token_reserves) / (eth_reserves + msg.value);
+        require(tokens_to_send > 0, "Insufficient token amount");
+        require(token_reserves - tokens_to_send >= 1, "Must leave at least 1 token");
+
+        // Apply fee
+        uint fee = (tokens_to_send * swap_fee_numerator) / swap_fee_denominator;
+        tokens_to_send -= fee;
+
+        // Update reserves
+        eth_reserves += msg.value;
+        token_reserves -= tokens_to_send;
+        k = token_reserves * eth_reserves;
+
+        // Transfer assets
+        token.transfer(msg.sender, tokens_to_send);
     }
 }

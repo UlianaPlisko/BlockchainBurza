@@ -631,30 +631,63 @@ async function getPoolState() {
 
 /*** ADD LIQUIDITY ***/
 async function addLiquidity(amountEth, maxSlippagePct) {
-    /** TODO: ADD YOUR CODE HERE **/
-   
+    // Calculate max and min exchange rates (using large values as placeholders since slippage is ignored)
+    const max_exchange_rate = ethers.constants.MaxUint256;
+    const min_exchange_rate = 0;
+
+    // Call the addLiquidity function on the contract
+    const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
+        .addLiquidity(max_exchange_rate, min_exchange_rate, { value: amountEth });
+    await tx.wait();
 }
 
 /*** REMOVE LIQUIDITY ***/
 async function removeLiquidity(amountEth, maxSlippagePct) {
-    /** TODO: ADD YOUR CODE HERE **/
-    
+    // Calculate max and min exchange rates (using large values as placeholders since slippage is ignored)
+    const max_exchange_rate = ethers.constants.MaxUint256;
+    const min_exchange_rate = 0;
+
+    // Call the removeLiquidity function on the contract
+    const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
+        .removeLiquidity(amountEth, max_exchange_rate, min_exchange_rate, { value: 0 });
+    await tx.wait();
 }
 
 async function removeAllLiquidity(maxSlippagePct) {
-    /** TODO: ADD YOUR CODE HERE **/
-   
+    // Calculate max and min exchange rates (using large values as placeholders since slippage is ignored)
+    const max_exchange_rate = ethers.constants.MaxUint256;
+    const min_exchange_rate = 0;
+
+    // Call the removeAllLiquidity function on the contract
+    const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
+        .removeAllLiquidity(max_exchange_rate, min_exchange_rate, { value: 0 });
+    await tx.wait();
 }
 
 /*** SWAP ***/
 async function swapTokensForETH(amountToken, maxSlippagePct) {
-    /** TODO: ADD YOUR CODE HERE **/
-   
+    // Approve tokens for the exchange contract
+    const approveTx = await token_contract.connect(provider.getSigner(defaultAccount))
+        .approve(exchange_address, amountToken);
+    await approveTx.wait();
+
+    // Calculate max exchange rate (using large value as placeholder since slippage is ignored)
+    const max_exchange_rate = ethers.constants.MaxUint256;
+
+    // Call the swapTokensForETH function on the contract
+    const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
+        .swapTokensForETH(amountToken, max_exchange_rate, { value: 0 });
+    await tx.wait();
 }
 
 async function swapETHForTokens(amountEth, maxSlippagePct) {
-    /** TODO: ADD YOUR CODE HERE **/
-   
+    // Calculate max exchange rate (using large value as placeholder since slippage is ignored)
+    const max_exchange_rate = ethers.constants.MaxUint256;
+
+    // Call the swapETHForTokens function on the contract
+    const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
+        .swapETHForTokens(max_exchange_rate, { value: amountEth });
+    await tx.wait();
 }
 
 // =============================================================================
