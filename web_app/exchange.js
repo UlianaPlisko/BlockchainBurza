@@ -595,18 +595,18 @@ async function init() {
     var poolState = await getPoolState();
     console.log("starting init");
     if (poolState['token_liquidity'] === 0
-            && poolState['eth_liquidity'] === 0) {
-      // Call mint twice to make sure mint can be called mutliple times prior to disable_mint
-      const total_supply = 100000;
-      await token_contract.connect(provider.getSigner(defaultAccount)).mint(total_supply / 2);
-		  await token_contract.connect(provider.getSigner(defaultAccount)).mint(total_supply / 2);
-		  await token_contract.connect(provider.getSigner(defaultAccount)).disable_mint();
-      await token_contract.connect(provider.getSigner(defaultAccount)).approve(exchange_address, total_supply);
-      // initialize pool with equal amounts of ETH and tokens, so exchange rate begins as 1:1
-      await exchange_contract.connect(provider.getSigner(defaultAccount)).createPool(5000, { value: ethers.utils.parseUnits("5000", "wei")});
-      console.log("init finished");
+        && poolState['eth_liquidity'] === 0) {
+        // Call mint twice to make sure mint can be called mutliple times prior to disable_mint
+        const total_supply = 100000;
+        await token_contract.connect(provider.getSigner(defaultAccount)).mint(total_supply / 2);
+        await token_contract.connect(provider.getSigner(defaultAccount)).mint(total_supply / 2);
+        await token_contract.connect(provider.getSigner(defaultAccount)).disable_mint();
+        await token_contract.connect(provider.getSigner(defaultAccount)).approve(exchange_address, total_supply);
+        // initialize pool with equal amounts of ETH and tokens, so exchange rate begins as 1:1
+        await exchange_contract.connect(provider.getSigner(defaultAccount)).createPool(5000, { value: ethers.utils.parseUnits("5000", "wei")});
+        console.log("init finished");
 
-       // All accounts start with 0 of your tokens. Thus, be sure to swap before adding liquidity.
+        // All accounts start with 0 of your tokens. Thus, be sure to swap before adding liquidity.
     }
 }
 
@@ -614,6 +614,7 @@ async function getPoolState() {
     // read pool balance for each type of liquidity:
     let liquidity_tokens = await token_contract.connect(provider.getSigner(defaultAccount)).balanceOf(exchange_address);
     let liquidity_eth = await provider.getBalance(exchange_address);
+    console.log("Pool state: ETH =", ethers.utils.formatUnits(liquidity_eth, 18), "LOL =", ethers.utils.formatUnits(liquidity_tokens, 18));
     return {
         token_liquidity: Number(liquidity_tokens),
         eth_liquidity: Number(liquidity_eth),
@@ -626,21 +627,42 @@ async function getPoolState() {
 //                    FUNCTIONS TO IMPLEMENT
 // ============================================================
 
-// Note: maxSlippagePct will be passed in as an int out of 100. 
+// Note: maxSlippagePct will be passed in as an int out of 100.
 // Be sure to divide by 100 for your calculations.
+// Helper function to process maxSlippagePct
+function processSlippage(maxSlippagePct, currentRate) {
+    let max_exchange_rate;
+    // If maxSlippagePct is empty, undefined, or null, use default maxExchangeRate
+    if (maxSlippagePct === undefined || maxSlippagePct === null || maxSlippagePct === '') {
+        max_exchange_rate = ethers.utils.parseUnits("2", 18);
+    } else {
+        // Convert to number
+        const slippagePct = Number(maxSlippagePct);
+        // Check if slippagePct is greater than 100
+        if (slippagePct > 100) {
+            throw new Error("Maximum slippage percentage cannot exceed 100");
+        }
+        // Calculate slippage and max exchange rate
+        const slippage = slippagePct / 100;
+        max_exchange_rate = Math.floor(currentRate * (1 + slippage));
+    }
+    return max_exchange_rate;
+}
 
 /*** ADD LIQUIDITY ***/
 async function addLiquidity(amountEth, maxSlippagePct) {
-    // Calculate max and min exchange rates (using large values as placeholders since slippage is ignored)
-    const max_exchange_rate = ethers.constants.MaxUint256;
-    const min_exchange_rate = 0;
+    const poolState = await getPoolState();
+    const currentRate = (poolState.token_liquidity * 1000) / poolState.eth_liquidity; // Same as in Solidity
+    const min_exchange_rate = 0; // Always 0 as per requirement
+    const max_exchange_rate = processSlippage(maxSlippagePct, currentRate);
 
-    // Approve a large token amount to cover the required tokens
+    // Approve tokens
+    const tokens_needed = Math.ceil((amountEth * poolState.token_liquidity) / poolState.eth_liquidity);
     const approveTx = await token_contract.connect(provider.getSigner(defaultAccount))
-        .approve(exchange_address, ethers.constants.MaxUint256);
+        .approve(exchange_address, tokens_needed);
     await approveTx.wait();
 
-    // Call the addLiquidity function on the contract
+    // Call addLiquidity
     const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
         .addLiquidity(max_exchange_rate, min_exchange_rate, { value: amountEth });
     await tx.wait();
@@ -648,22 +670,25 @@ async function addLiquidity(amountEth, maxSlippagePct) {
 
 /*** REMOVE LIQUIDITY ***/
 async function removeLiquidity(amountEth, maxSlippagePct) {
-    // Calculate max and min exchange rates (using large values as placeholders since slippage is ignored)
-    const max_exchange_rate = ethers.constants.MaxUint256;
-    const min_exchange_rate = 0;
+    const poolState = await getPoolState();
+    const currentRate = (poolState.token_liquidity * 1000) / poolState.eth_liquidity; // Same as in Solidity
+    const max_exchange_rate = processSlippage(maxSlippagePct, currentRate);
+    const min_exchange_rate = 0; // Always 0 as per requirement
 
-    // Call the removeLiquidity function on the contract
+    // Call removeLiquidity
     const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
         .removeLiquidity(amountEth, max_exchange_rate, min_exchange_rate, { value: 0 });
     await tx.wait();
 }
 
+/*** REMOVE ALL LIQUIDITY ***/
 async function removeAllLiquidity(maxSlippagePct) {
-    // Calculate max and min exchange rates (using large values as placeholders since slippage is ignored)
-    const max_exchange_rate = ethers.constants.MaxUint256;
-    const min_exchange_rate = 0;
+    const poolState = await getPoolState();
+    const currentRate = (poolState.token_liquidity * 1000) / poolState.eth_liquidity; // Same as in Solidity
+    const max_exchange_rate = processSlippage(maxSlippagePct, currentRate);
+    const min_exchange_rate = 0; // Always 0 as per requirement
 
-    // Call the removeAllLiquidity function on the contract
+    // Call removeAllLiquidity
     const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
         .removeAllLiquidity(max_exchange_rate, min_exchange_rate, { value: 0 });
     await tx.wait();
@@ -671,25 +696,27 @@ async function removeAllLiquidity(maxSlippagePct) {
 
 /*** SWAP ***/
 async function swapTokensForETH(amountToken, maxSlippagePct) {
-    // Approve tokens for the exchange contract
+    const poolState = await getPoolState();
+    const currentRate = (poolState.token_liquidity * 1000) / poolState.eth_liquidity; // Same as in Solidity
+    const max_exchange_rate = processSlippage(maxSlippagePct, currentRate);
+
+    // Approve tokens
     const approveTx = await token_contract.connect(provider.getSigner(defaultAccount))
         .approve(exchange_address, amountToken);
     await approveTx.wait();
 
-    // Calculate max exchange rate (using large value as placeholder since slippage is ignored)
-    const max_exchange_rate = ethers.constants.MaxUint256;
-
-    // Call the swapTokensForETH function on the contract
+    // Call swapTokensForETH
     const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
         .swapTokensForETH(amountToken, max_exchange_rate, { value: 0 });
     await tx.wait();
 }
 
 async function swapETHForTokens(amountEth, maxSlippagePct) {
-    // Calculate max exchange rate (using large value as placeholder since slippage is ignored)
-    const max_exchange_rate = ethers.constants.MaxUint256;
+    const poolState = await getPoolState();
+    const currentRate = (poolState.token_liquidity * 1000) / poolState.eth_liquidity; // Same as in Solidity
+    const max_exchange_rate = processSlippage(maxSlippagePct, currentRate);
 
-    // Call the swapETHForTokens function on the contract
+    // Call swapETHForTokens
     const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
         .swapETHForTokens(max_exchange_rate, { value: amountEth });
     await tx.wait();
