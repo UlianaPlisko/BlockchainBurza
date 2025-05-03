@@ -635,6 +635,11 @@ async function addLiquidity(amountEth, maxSlippagePct) {
     const max_exchange_rate = ethers.constants.MaxUint256;
     const min_exchange_rate = 0;
 
+    // Approve a large token amount to cover the required tokens
+    const approveTx = await token_contract.connect(provider.getSigner(defaultAccount))
+        .approve(exchange_address, ethers.constants.MaxUint256);
+    await approveTx.wait();
+
     // Call the addLiquidity function on the contract
     const tx = await exchange_contract.connect(provider.getSigner(defaultAccount))
         .addLiquidity(max_exchange_rate, min_exchange_rate, { value: amountEth });
