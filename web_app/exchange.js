@@ -595,18 +595,18 @@ async function init() {
     var poolState = await getPoolState();
     console.log("starting init");
     if (poolState['token_liquidity'] === 0
-        && poolState['eth_liquidity'] === 0) {
-        // Call mint twice to make sure mint can be called mutliple times prior to disable_mint
-        const total_supply = 100000;
-        await token_contract.connect(provider.getSigner(defaultAccount)).mint(total_supply / 2);
-        await token_contract.connect(provider.getSigner(defaultAccount)).mint(total_supply / 2);
-        await token_contract.connect(provider.getSigner(defaultAccount)).disable_mint();
-        await token_contract.connect(provider.getSigner(defaultAccount)).approve(exchange_address, total_supply);
-        // initialize pool with equal amounts of ETH and tokens, so exchange rate begins as 1:1
-        await exchange_contract.connect(provider.getSigner(defaultAccount)).createPool(5000, { value: ethers.utils.parseUnits("5000", "wei")});
-        console.log("init finished");
+            && poolState['eth_liquidity'] === 0) {
+      // Call mint twice to make sure mint can be called mutliple times prior to disable_mint
+      const total_supply = 100000;
+      await token_contract.connect(provider.getSigner(defaultAccount)).mint(total_supply / 2);
+		  await token_contract.connect(provider.getSigner(defaultAccount)).mint(total_supply / 2);
+		  await token_contract.connect(provider.getSigner(defaultAccount)).disable_mint();
+      await token_contract.connect(provider.getSigner(defaultAccount)).approve(exchange_address, total_supply);
+      // initialize pool with equal amounts of ETH and tokens, so exchange rate begins as 1:1
+      await exchange_contract.connect(provider.getSigner(defaultAccount)).createPool(5000, { value: ethers.utils.parseUnits("5000", "wei")});
+      console.log("init finished");
 
-        // All accounts start with 0 of your tokens. Thus, be sure to swap before adding liquidity.
+       // All accounts start with 0 of your tokens. Thus, be sure to swap before adding liquidity.
     }
 }
 
@@ -614,7 +614,6 @@ async function getPoolState() {
     // read pool balance for each type of liquidity:
     let liquidity_tokens = await token_contract.connect(provider.getSigner(defaultAccount)).balanceOf(exchange_address);
     let liquidity_eth = await provider.getBalance(exchange_address);
-    console.log("Pool state: ETH =", ethers.utils.formatUnits(liquidity_eth, 18), "LOL =", ethers.utils.formatUnits(liquidity_tokens, 18));
     return {
         token_liquidity: Number(liquidity_tokens),
         eth_liquidity: Number(liquidity_eth),
@@ -634,7 +633,7 @@ function processSlippage(maxSlippagePct, currentRate) {
     let max_exchange_rate;
     // If maxSlippagePct is empty, undefined, or null, use default maxExchangeRate
     if (maxSlippagePct === undefined || maxSlippagePct === null || maxSlippagePct === '') {
-        max_exchange_rate = ethers.utils.parseUnits("2", 18);
+        max_exchange_rate = ethers.constants.MaxUint256;
     } else {
         // Convert to number
         const slippagePct = Number(maxSlippagePct);
