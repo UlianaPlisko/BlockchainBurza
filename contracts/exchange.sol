@@ -10,7 +10,7 @@ contract TokenExchange is Ownable {
     string public exchange_name = '';
 
     address tokenAddr = 0x5FbDB2315678afecb367f032d93F642f64180aa3;
-    Token public token = Token(tokenAddr);                                
+    Token public token = Token(tokenAddr);
 
     // Liquidity pool for the exchange
     uint private token_reserves = 0;
@@ -68,7 +68,6 @@ contract TokenExchange is Ownable {
         // Calculate tokens needed based on current pool ratio
         uint tokens_needed = (msg.value * token_reserves) / eth_reserves;
         require(tokens_needed > 0, "Insufficient token amount");
-        require(token.balanceOf(msg.sender) >= tokens_needed, "Insufficient token balance");
 
         // Check exchange rate bounds
         uint current_rate = (token_reserves * 1000) / eth_reserves;
@@ -80,13 +79,15 @@ contract TokenExchange is Ownable {
         uint share = (msg.value * SHARE_DENOMINATOR) / new_eth_total;
         require(share > 0, "Share too small");
 
-        // Transfer tokens
+        // Transfer tokens (assume approval is done)
         token.transferFrom(msg.sender, address(this), tokens_needed);
 
         // Update reserves
         token_reserves = token.balanceOf(address(this));
         eth_reserves = address(this).balance;
         k = token_reserves * eth_reserves;
+        console.log("addLiquidity: token_reserves after: %s, eth_reserves after: %s", token_reserves, eth_reserves);
+        console.log("addLiquidity: k after: %s", k);
 
         // Update LP shares
         if (lps[msg.sender] == 0) {
@@ -103,7 +104,7 @@ contract TokenExchange is Ownable {
         }
     }
 
-    // Function removeLiquidity: Removes specified amount of liquidity
+// Function removeLiquidity: Removes specified amount of liquidity
     function removeLiquidity(uint amountETH, uint max_exchange_rate, uint min_exchange_rate)
     public
     payable
@@ -146,12 +147,12 @@ contract TokenExchange is Ownable {
             }
         }
 
-        // Transfer assets
+        // Transfer assets back to user
         token.transfer(msg.sender, tokens_to_return);
         payable(msg.sender).transfer(amountETH);
     }
 
-    // Function removeAllLiquidity: Removes all liquidity
+// Function removeAllLiquidity: Removes all liquidity
     function removeAllLiquidity(uint max_exchange_rate, uint min_exchange_rate)
     external
     payable
@@ -180,7 +181,6 @@ contract TokenExchange is Ownable {
         token_reserves -= tokens_to_return;
         k = token_reserves * eth_reserves;
 
-        // Remove LP
         total_shares -= user_share;
         lps[msg.sender] = 0;
         for (uint i = 0; i < lp_providers.length; i++) {
@@ -190,7 +190,7 @@ contract TokenExchange is Ownable {
             }
         }
 
-        // Transfer assets
+        // Transfer assets back to user
         token.transfer(msg.sender, tokens_to_return);
         payable(msg.sender).transfer(amountETH);
     }
@@ -201,7 +201,6 @@ contract TokenExchange is Ownable {
     payable
     {
         require(amountTokens > 0, "Must provide tokens");
-        require(token.balanceOf(msg.sender) >= amountTokens, "Insufficient token balance");
         require(eth_reserves > 1, "Insufficient ETH reserves");
 
         // Check exchange rate
@@ -253,7 +252,7 @@ contract TokenExchange is Ownable {
         token_reserves -= tokens_to_send;
         k = token_reserves * eth_reserves;
 
-        // Transfer assets
+        // Transfer tokens to user
         token.transfer(msg.sender, tokens_to_send);
     }
 }

@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\User\\Desktop\\STU\\4 semester\\DMBLOCK\\zadanie2\\contracts\\exchange.sol": {
-      "lastModificationDate": 1746274457720,
-      "contentHash": "6678c0d7c16565d875a9bb0cc79cca6d",
+      "lastModificationDate": 1746361002665,
+      "contentHash": "36122b83e931c1b983c80c637d8aa0e7",
       "sourceName": "contracts/exchange.sol",
       "solcConfig": {
         "version": "0.8.17",
@@ -40,8 +40,8 @@
       ]
     },
     "C:\\Users\\User\\Desktop\\STU\\4 semester\\DMBLOCK\\zadanie2\\contracts\\token.sol": {
-      "lastModificationDate": 1746273550485,
-      "contentHash": "365778e8faa1f7565fa1a55a6bb39385",
+      "lastModificationDate": 1746360458988,
+      "contentHash": "1e91847280f7c8f915e261c7dd3a852f",
       "sourceName": "contracts/token.sol",
       "solcConfig": {
         "version": "0.8.17",
